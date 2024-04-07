@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"testing"
 
@@ -57,6 +58,47 @@ func TestHandleConnection(t *testing.T) {
 	expectedStatus := byte(0x00) // 0x00 indicates success
 
 	validateResponse(t, output, expectedStatus, network.STATUS_SET_SUCCESS)
+
+}
+
+func TestOperations(t *testing.T) {
+	mockService := NewMockDbService()
+	server := network.NewServer(mockService)
+	localAddr := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}
+	remoteAddr := &net.TCPAddr{IP: net.ParseIP("10.0.0.1"), Port: 9090}
+
+	tests := []struct {
+		name  string
+		input *bytes.Buffer
+	}{
+		{
+			name: "Test SET operation",
+			input: bytes.NewBuffer([]byte{
+				protocol.OpSet, // op code for SET
+				0x00, 0x03,     //key length (3)
+				'k', 'e', 'y',
+				0x00, 0x005, //valu length (5)
+				'v', 'a', 'l', 'u', 'e',
+			}),
+		}, {
+			name: "Test GET opeartion",
+			input: bytes.NewBuffer([]byte{
+				protocol.OpGet,
+				0x00, 0x003, //key length
+				'k', 'e', 'y',
+			}),
+		},
+	}
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			output := new(bytes.Buffer)
+			conn := newMockConnection(tst.input, output, localAddr, remoteAddr)
+			server.HandleConnection(conn)
+			log.Println(output)
+			expectedStatus := byte(0x00) // 0x00 indicates success
+			validateResponse(t, output, expectedStatus, network.STATUS_SET_SUCCESS)
+		})
+	}
 
 }
 

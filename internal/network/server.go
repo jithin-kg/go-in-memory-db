@@ -3,6 +3,7 @@ package network
 import (
 	"bufio"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -112,6 +113,42 @@ func (s *Server) handleSetOperatin(reader *bufio.Reader, conn net.Conn) {
 	log.Printf("SET operation for key: %s, value: %s\n", keyBuf, valueBuf)
 }
 
+func (s *Server) handleGetOperation(reader *bufio.Reader, conn net.Conn) {
+	// read next 2 bytes to get the key length
+	keyLengthBuf := make([]byte, 2)
+	_, err := reader.Read(keyLengthBuf)
+	if err != nil {
+		s.handleError(conn, protocol.StatusErrReadKey, fmt.Sprintf("Error reading key length: %v", err))
+		log.Println("Error reading key length:", err)
+		return
+	}
+	keyLength := binary.BigEndian.Uint16(keyLengthBuf) // got the key length
+	// read the key
+	keyBuf := make([]byte, keyLength)
+	_, err = reader.Read(keyBuf)
+	if err != nil {
+		s.handleError(conn, protocol.StatusErrReadKey, fmt.Sprintf("Error reading key: %v", err))
+		log.Println("Error reading key:", err)
+		return
+	}
+	key := string(keyBuf)
+	val, ok, err := s.dbService.Get(key)
+	if err != nil {
+		s.handleError(conn, protocol.StatusErrReadKey, fmt.Sprintf("Error reading key: %v", err))
+		log.Println("Error reading from storage:", err)
+	}
+	if !ok {
+		s.handleError(conn, protocol.StatusErrReadOp, fmt.Sprintf("key not found: %v", err))
+		log.Println("key not found:")
+	}
+	valBytes, err := json.Marshal(val)
+	if err != nil {
+		s.handleError(conn, protocol.StatusErrReadKey, fmt.Sprintf("error converting key %v", err))
+	}
+	sendResponse(conn, protocol.StatusGetSuccess, valBytes)
+
+}
+
 // func handleConnection(conn net.Conn) {
 func (s *Server) HandleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -133,6 +170,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.handleSetOperatin(reader, conn)
 		case protocol.OpGet:
 			// handle the GET operation
+			s.handleGetOperation(reader, conn)
 			log.Println("GET operation ")
 		}
 
