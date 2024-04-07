@@ -1,7 +1,12 @@
 package main
 
-import "github.com/jithin-kg/go-in-memory-db/internal/network"
+import (
+	"github.com/jithin-kg/go-in-memory-db/internal/db"
+	"github.com/jithin-kg/go-in-memory-db/internal/network"
+)
 
 func main() {
-	network.StartServer("8081")
+	kvStore := db.NewKeyValueStore()
+	server := network.NewServer(kvStore)
+	server.Start("8080")
 }

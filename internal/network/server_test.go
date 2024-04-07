@@ -6,50 +6,29 @@ import (
 	"fmt"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/jithin-kg/go-in-memory-db/internal/network"
 	"github.com/jithin-kg/go-in-memory-db/internal/protocol"
 )
 
-type mockConn struct {
-	readBuffer  *bytes.Buffer
-	writeBuffer *bytes.Buffer
-	localAddr   net.Addr
-	remoteAddr  net.Addr
+type MockDbService struct {
+	store map[string]interface{}
 }
 
-func (m *mockConn) Read(b []byte) (n int, err error) {
-	return m.readBuffer.Read(b)
-}
-func (m *mockConn) Write(b []byte) (n int, err error) {
-	return m.writeBuffer.Write(b)
-}
-
-func (m *mockConn) Close() error {
+func (s *MockDbService) Set(key string, value interface{}) error {
+	s.store[key] = value
 	return nil
 }
 
-func (m *mockConn) LocalAddr() net.Addr {
-	return nil
+func (s *MockDbService) Get(key string) (interface{}, bool, error) {
+	val, ok := s.store[key]
+	return val, ok, nil
 }
-
-func (m *mockConn) RemoteAddr() net.Addr {
-	return nil
+func NewMockDbService() *MockDbService {
+	return &MockDbService{
+		store: make(map[string]interface{}),
+	}
 }
-
-func (m *mockConn) SetDeadline(t time.Time) error {
-	return nil
-}
-
-func (m *mockConn) SetReadDeadline(t time.Time) error {
-	return nil
-}
-
-func (m *mockConn) SetWriteDeadline(t time.Time) error {
-	return nil
-}
-
 func newMockConnection(input, output *bytes.Buffer, localAddr, remoteAddr net.Addr) network.Conn {
 	return &mockConn{
 		readBuffer:  input,
@@ -71,10 +50,19 @@ func TestHandleConnection(t *testing.T) {
 	localAddr := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}
 	remoteAddr := &net.TCPAddr{IP: net.ParseIP("10.0.0.1"), Port: 9090}
 	conn := newMockConnection(input, output, localAddr, remoteAddr)
-	network.HandleConnection(conn)
 
-	// Read and validate the response
+	mockService := NewMockDbService()
+	server := network.NewServer(mockService)
+	server.HandleConnection(conn)
 	expectedStatus := byte(0x00) // 0x00 indicates success
+
+	validateResponse(t, output, expectedStatus, network.STATUS_SET_SUCCESS)
+
+}
+
+func validateResponse(t *testing.T, output *bytes.Buffer, expectedStatus byte, expectedMessage string) {
+	t.Helper()
+	// Read and validate the response
 	status := output.Bytes()[0]
 
 	if status != expectedStatus {
@@ -85,6 +73,9 @@ func TestHandleConnection(t *testing.T) {
 	dataLength := binary.BigEndian.Uint16(output.Bytes()[1:3])
 	if dataLength > 0 {
 		message := string(output.Bytes()[3 : 3+dataLength])
+		if expectedMessage != message {
+			t.Errorf("Expected message %v, got: %v", expectedMessage, message)
+		}
 		fmt.Printf("Response message %s", message)
 	} else {
 		t.Errorf("Expected non-zero data length in resonse")

@@ -13,13 +13,14 @@ func NewKeyValueStore() *KeyValueStore {
 	}
 }
 
-func (s *KeyValueStore) Set(key string, value interface{}) {
+func (s *KeyValueStore) Set(key string, value interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.store[key] = value
+	return nil
 }
 
-func (s *KeyValueStore) Get(key string) (value interface{}, exists bool) {
+func (s *KeyValueStore) Get(key string) (value interface{}, exists bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value, exists = s.store[key]
